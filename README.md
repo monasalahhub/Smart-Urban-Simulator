@@ -158,24 +158,7 @@ We welcome contributions from:
 - Documentation and localization
 - NASA data integration enhancements
 
-## 📄 License
 
-This project is developed for the NASA Space Apps Challenge 2024 and is available under open-source licenses for educational and non-commercial use.
 
-## 🙋‍♂️ Support
-
-For technical support or collaboration inquiries:
-- Review the documentation in `/Documentation/`
-- Check existing issues in the project repository
-- Contact the development team through NASA Space Apps channels
-
-## 🎊 Acknowledgments
-
-- **NASA** for Earth observation data and the Space Apps Challenge platform
-- **European Space Agency** for Copernicus/Sentinel data access
-- **Saudi Arabian Cultural Heritage Commission** for traditional architecture insights
-- **Al-Ahsa Municipality** for urban planning context and guidance
-
----
 
 *Built with 🌍 for sustainable urban futures*
