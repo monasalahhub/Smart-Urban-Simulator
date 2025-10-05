@@ -1,0 +1,155 @@
+// Smart Urban Planning Assistant - Arduino Sensor Node
+#include <DHT.h>
+#include <SoftwareSerial.h>
+
+#define DHT_PIN 2
+#define MQ135_PIN A0
+#define SOIL_MOISTURE_PIN A1
+#define LIGHT_SENSOR_PIN A2
+#define NOISE_SENSOR_PIN A3
+#define GPS_RX 3
+#define GPS_TX 4
+#define DHT_TYPE DHT22
+
+DHT dht(DHT_PIN, DHT_TYPE);
+SoftwareSerial gpsSerial(GPS_RX, GPS_TX);
+
+// Sensor data structure
+struct UrbanData {
+  float temperature;
+  float humidity;
+  int airQuality;
+  int soilMoisture;
+  int lightLevel;
+  int noiseLevel;
+  String location;
+  int uvIndex; // Simulated UV data
+};   
+ 
+                               
+UrbanData cityData;
+unsigned long previousMillis = 0;
+const long interval = 5000;
+
+void setup() {
+  Serial.begin(9600);
+  gpsSerial.begin(9600);
+  dht.begin();
+  
+  Serial.println("🏙️ Smart Urban Planning Assistant Started");
+  Serial.println("📊 Monitoring: Temp, Humidity, Air Quality, Soil, Light, Noise");
+  delay(2000);
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+  
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+    
+    readAllSensors();
+    analyzeUrbanHealth();
+    sendComprehensiveData();
+  }
+  
+  readGPS();
+}
+
+void readAllSensors() {
+  // Temperature & Humidity
+  float temp = dht.readTemperature();
+  float hum = dht.readHumidity();
+  if (!isnan(temp)) cityData.temperature = temp;
+  if (!isnan(hum)) cityData.humidity = hum;
+  
+  // Air Quality (average 10 readings)
+  cityData.airQuality = readAverage(MQ135_PIN, 10);
+  
+  // Soil Moisture
+  cityData.soilMoisture = readAverage(SOIL_MOISTURE_PIN, 10);
+  
+  // Light Level
+  cityData.lightLevel = readAverage(LIGHT_SENSOR_PIN, 5);
+  
+  // Noise Level
+  cityData.noiseLevel = readAverage(NOISE_SENSOR_PIN, 5);
+  
+  // Simulated UV Index based on light and time
+  cityData.uvIndex = map(cityData.lightLevel, 0, 1023, 0, 11);
+}
+
+int readAverage(int pin, int samples) {
+  long total = 0;
+  for (int i = 0; i < samples; i++) {
+    total += analogRead(pin);
+    delay(10);
+  }
+  return total / samples;
+}
+
+void analyzeUrbanHealth() {
+  // Calculate urban health scores
+  int heatScore = calculateHeatScore();
+  int airScore = calculateAirScore();
+  int greenScore = calculateGreenScore();
+  
+  Serial.print("🔍 Urban Health Scores - Heat:");
+  Serial.print(heatScore);
+  Serial.print("/10 Air:");
+  Serial.print(airScore);
+  Serial.print("/10 Green:");
+  Serial.println(greenScore);
+}
+
+int calculateHeatScore() {
+  if (cityData.temperature > 35) return 2;
+  if (cityData.temperature > 30) return 4;
+  if (cityData.temperature > 25) return 6;
+  if (cityData.temperature > 20) return 8;
+  return 10;
+}
+
+int calculateAirScore() {
+  if (cityData.airQuality > 600) return 2;
+  if (cityData.airQuality > 400) return 4;
+  if (cityData.airQuality > 300) return 6;
+  if (cityData.airQuality > 200) return 8;
+  return 10;
+}
+
+int calculateGreenScore() {
+  int moisturePercent = map(cityData.soilMoisture, 0, 1023, 0, 100);
+  if (moisturePercent < 20) return 2;
+  if (moisturePercent < 40) return 4;
+  if (moisturePercent < 60) return 6;
+  if (moisturePercent < 80) return 8;
+  return 10;
+}
+
+void readGPS() {
+  if (gpsSerial.available()) {
+    String data = gpsSerial.readStringUntil('\n');
+    if (data.startsWith("$GPGGA")) {
+      cityData.location = "24.7136,46.6753"; // Simulated
+    }
+  }
+}
+
+void sendComprehensiveData() {
+  Serial.print("URBAN_DATA:");
+  Serial.print(cityData.temperature);
+  Serial.print(",");
+  Serial.print(cityData.humidity);
+  Serial.print(",");
+  Serial.print(cityData.airQuality);
+  Serial.print(",");
+  Serial.print(cityData.soilMoisture);
+  Serial.print(",");
+  Serial.print(cityData.lightLevel);
+  Serial.print(",");
+  Serial.print(cityData.noiseLevel);
+  Serial.print(",");
+  Serial.print(cityData.uvIndex);
+  Serial.print(",");
+  Serial.println(cityData.location);
+}
