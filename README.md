@@ -4,7 +4,7 @@
 🌍 SMART URBAN PLANNING ASSISTANT
 NASA Space Apps Challenge 2025 
 
-Challenge : Data Pathways to Healthy Cities and Human Settlements<img width="1815" height="133" alt="image" src="https://github.com/user-attachments/assets/8c8aaaf0-9632-4021-a362-fb87e894bf21" />
+Challenge : Data Pathways to Healthy Cities and Human Settlements
 
 ```
 
