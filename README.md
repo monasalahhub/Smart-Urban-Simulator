@@ -64,7 +64,6 @@ The **Smart Urban Planning Assistant** is an integrated decision-support system 
    - The dashboard will automatically detect sensor data
 
 
-```
 
 ## 🌟 Key Innovations
 
