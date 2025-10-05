@@ -63,53 +63,7 @@ The **Smart Urban Planning Assistant** is an integrated decision-support system 
    - Ensure Arduino is connected via USB
    - The dashboard will automatically detect sensor data
 
-## 📁 Project Structure
 
-```
-SmartUrbanPlanningAssistant/
-│
-├── Hardware/
-│   ├── SmartUrbanPlanningAssistant.ino  # Arduino sensor code
-│   ├── sensor_pinout.png                # Wiring diagram
-│   └── components_list.txt              # Hardware components
-│
-├── Software/
-│   ├── UrbanPlanningDashboard.pde       # Processing visualization
-│   ├── data_structures.pde              # Data classes and structures
-│   └── visualization_components.pde     # UI components
-│
-├── Documentation/
-│   ├── presentation_slides.pdf          # 7-slide project overview
-│   ├── nasa_data_integration.md         # NASA data usage details
-│   └── stakeholder_engagement.md        # Implementation strategy
-│
-└── Assets/
-    ├── dashboard_screenshots/           # Application screenshots
-    ├── system_architecture.png          # Technical architecture
-    └── impact_analysis_charts/          # Projected outcomes
-```
-
-## 🔧 Configuration
-
-### Arduino Sensor Setup
-```cpp
-// Sensor Pin Configuration
-#define DHT_PIN 2          // Temperature/Humidity
-#define MQ135_PIN A0       // Air Quality
-#define SOIL_MOISTURE_PIN A1  // Soil Moisture
-#define LIGHT_SENSOR_PIN A2   // Light Levels
-#define NOISE_SENSOR_PIN A3   // Noise Levels
-#define GPS_RX 3           // GPS Receive
-#define GPS_TX 4           // GPS Transmit
-```
-
-### Processing Dashboard Settings
-```java
-// Dashboard Configuration
-int dashboardWidth = 1400;
-int dashboardHeight = 900;
-String cityName = "Al-Ahsa, Saudi Arabia";
-boolean simulationMode = true;  // Set to false with live Arduino
 ```
 
 ## 🌟 Key Innovations
