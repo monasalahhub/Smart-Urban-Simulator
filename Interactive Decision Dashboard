@@ -1,0 +1,1218 @@
+// Enhanced Smart Urban Planning Assistant - Interactive Decision Dashboard
+import processing.serial.*;
+
+// === SYSTEM VARIABLES ===
+Serial myPort;
+UrbanData currentData;
+ArrayList<Solution> solutions = new ArrayList<Solution>();
+ArrayList<Observation> citizenObservations = new ArrayList<Observation>();
+ArrayList<HotSpot> hotSpots = new ArrayList<HotSpot>();
+PFont titleFont, bodyFont;
+
+// View states
+int currentView = 0; // 0=Overview, 1=Scenarios, 2=Impact Analysis, 3=Citizen Input
+boolean showEarthData = true;
+int selectedSolution = -1;
+int selectedScenario = 0;
+
+// Enhanced color scheme
+color bgColor = #F5F7FA;
+color criticalColor = #E74C3C;
+color warningColor = #F39C12;
+color goodColor = #27AE60;
+color excellentColor = #16A085;
+color primaryDark = #2C3E50;
+color primaryLight = #34495E;
+color accentBlue = #3498DB;
+
+// Time-series data for trends
+ArrayList<Float> tempHistory = new ArrayList<Float>();
+ArrayList<Float> airQualityHistory = new ArrayList<Float>();
+int maxHistoryPoints = 50;
+
+void setup() {
+  size(1400, 900);
+  titleFont = createFont("Arial Bold", 18);
+  bodyFont = createFont("Arial", 14);
+  textFont(bodyFont);
+  
+  // Initialize with demo data (Al-Ahsa conditions)
+  currentData = new UrbanData();
+  currentData.temperature = 41.5;
+  currentData.humidity = 18;
+  currentData.airQuality = 520;
+  currentData.soilMoisture = 220;
+  currentData.lightLevel = 880;
+  currentData.noiseLevel = 580;
+  currentData.uvIndex = 11;
+  currentData.location = "Al-Ahsa, Saudi Arabia (25.3894°N, 49.5818°E)";
+  currentData.population = 1200000;
+  currentData.greenCoverage = 8.7;
+  
+  // Initialize history
+  for (int i = 0; i < 20; i++) {
+    tempHistory.add(currentData.temperature + random(-3, 3));
+    airQualityHistory.add(float(currentData.airQuality) + random(-50, 50));
+  }
+  
+  // Connect to Arduino
+  try {
+    if (Serial.list().length > 0) {
+      String portName = Serial.list()[0];
+      myPort = new Serial(this, portName, 9600);
+      myPort.bufferUntil('\n');
+    }
+  } catch (Exception e) {
+    println("Arduino not connected - using simulation mode");
+  }
+  
+  generateSolutions();
+  detectHotSpots();
+  simulateCitizenObservations();
+}
+
+void draw() {
+  background(bgColor);
+  
+  drawHeader();
+  drawNavigationTabs();
+  
+  switch(currentView) {
+    case 0: drawOverviewDashboard(); break;
+    case 1: drawScenarioPlanning(); break;
+    case 2: drawImpactAnalysis(); break;
+    case 3: drawCitizenInput(); break;
+  }
+  
+  drawAlertBanner();
+}
+
+void drawHeader() {
+  fill(primaryDark);
+  noStroke();
+  rect(0, 0, width, 90);
+  
+  fill(255);
+  textFont(titleFont);
+  textSize(28);
+  textAlign(LEFT);
+  text("🌍 Smart Urban Planning Dashboard - Al-Ahsa", 30, 40);
+  
+  textFont(bodyFont);
+  textSize(14);
+  text("Evidence-Based Decision Support for Sustainable Cities", 30, 65);
+  
+  fill(goodColor);
+  ellipse(width - 100, 40, 12, 12);
+  fill(255);
+  textAlign(RIGHT);
+  text("LIVE", width - 110, 45);
+  
+  textSize(12);
+  text(currentData.location, width - 30, 70);
+  textAlign(LEFT);
+}
+
+void drawNavigationTabs() {
+  String[] tabs = {"📊 Overview", "🎯 Scenarios", "📈 Impact", "👥 Citizens"};
+  float tabWidth = width / 4.0;
+  
+  for (int i = 0; i < tabs.length; i++) {
+    fill(i == currentView ? primaryLight : primaryDark);
+    noStroke();
+    rect(i * tabWidth, 90, tabWidth, 50);
+    
+    fill(255);
+    textAlign(CENTER);
+    textSize(16);
+    text(tabs[i], i * tabWidth + tabWidth/2, 120);
+    
+    if (mouseX > i * tabWidth && mouseX < (i+1) * tabWidth && 
+        mouseY > 90 && mouseY < 140) {
+      fill(255, 255, 255, 50);
+      rect(i * tabWidth, 90, tabWidth, 50);
+    }
+  }
+  textAlign(LEFT);
+}
+
+void drawOverviewDashboard() {
+  drawCriticalMetrics(30, 160);
+  drawUrbanHeatMap(30, 360);
+  drawTrendCharts(520, 160);
+  drawPriorityActions(1010, 160);
+  if (showEarthData) drawEarthObservationPanel(520, 550);
+}
+
+void drawCriticalMetrics(float x, float y) {
+  fill(255);
+  stroke(200);
+  strokeWeight(1);
+  rect(x, y, 460, 180, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  textSize(18);
+  text("⚠️ Critical Urban Health Indicators", x + 20, y + 30);
+  
+  float indicatorY = y + 60;
+  drawMetricIndicator(x + 20, indicatorY, "Temperature", 
+    nf(currentData.temperature, 0, 1) + "°C", 
+    currentData.temperature, 25, 35, 45);
+  
+  drawMetricIndicator(x + 20, indicatorY + 40, "Air Quality Index", 
+    currentData.airQuality + " AQI", 
+    currentData.airQuality, 100, 300, 500);
+  
+  drawMetricIndicator(x + 20, indicatorY + 80, "Green Coverage", 
+    nf(currentData.greenCoverage, 0, 1) + "%", 
+    currentData.greenCoverage, 15, 5, 2);
+}
+
+void drawMetricIndicator(float x, float y, String label, String value, 
+                         float current, float good, float warning, float critical) {
+  textFont(bodyFont);
+  textSize(14);
+  fill(primaryDark);
+  text(label + ":", x, y);
+  
+  textSize(16);
+  textAlign(RIGHT);
+  text(value, x + 180, y);
+  textAlign(LEFT);
+  
+  float barX = x + 200;
+  float barWidth = 200;
+  color statusColor = excellentColor;
+  
+  if (current >= critical) statusColor = criticalColor;
+  else if (current >= warning) statusColor = warningColor;
+  else if (current >= good) statusColor = goodColor;
+  
+  fill(230);
+  noStroke();
+  rect(barX, y - 12, barWidth, 18, 9);
+  
+  fill(statusColor);
+  float fillPercent = constrain(map(current, 0, critical * 1.2, 0, 1), 0, 1);
+  rect(barX, y - 12, barWidth * fillPercent, 18, 9);
+  
+  textSize(11);
+  fill(255);
+  String status = current >= critical ? "CRITICAL" : 
+                  current >= warning ? "POOR" : 
+                  current >= good ? "MODERATE" : "GOOD";
+  text(status, barX + 8, y);
+}
+
+void drawUrbanHeatMap(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 460, 260, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  text("🗺️ Urban Heat & Pollution Hot Spots", x + 20, y + 30);
+  
+  float cellSize = 35;
+  float mapX = x + 30;
+  float mapY = y + 60;
+  
+  textFont(bodyFont);
+  textSize(10);
+  
+  for (int i = 0; i < min(hotSpots.size(), 55); i++) {
+    HotSpot hs = hotSpots.get(i);
+    float hx = mapX + (i % 11) * cellSize;
+    float hy = mapY + (i / 11) * cellSize;
+    
+    if (hs.severity >= 0.8) fill(criticalColor);
+    else if (hs.severity >= 0.6) fill(warningColor);
+    else if (hs.severity >= 0.4) fill(color(241, 196, 15));
+    else fill(goodColor);
+    
+    noStroke();
+    rect(hx, hy, cellSize - 2, cellSize - 2, 3);
+    
+    if (mouseX > hx && mouseX < hx + cellSize && 
+        mouseY > hy && mouseY < hy + cellSize) {
+      fill(0, 200);
+      rect(mouseX + 10, mouseY - 40, 180, 35, 5);
+      fill(255);
+      textSize(11);
+      text(hs.type, mouseX + 20, mouseY - 25);
+      text("Severity: " + nf(hs.severity * 100, 0, 0) + "%", mouseX + 20, mouseY - 12);
+    }
+  }
+  
+  float legendY = y + 220;
+  drawLegendItem(x + 30, legendY, criticalColor, "Critical");
+  drawLegendItem(x + 150, legendY, warningColor, "High");
+  drawLegendItem(x + 250, legendY, color(241, 196, 15), "Moderate");
+  drawLegendItem(x + 360, legendY, goodColor, "Good");
+}
+
+void drawLegendItem(float x, float y, color c, String label) {
+  fill(c);
+  noStroke();
+  rect(x, y, 15, 15, 3);
+  fill(primaryDark);
+  textSize(10);
+  text(label, x + 20, y + 11);
+}
+
+void drawTrendCharts(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 460, 370, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  text("📉 Environmental Trends (24hr)", x + 20, y + 30);
+  
+  drawLineChart(x + 30, y + 60, 400, 120, tempHistory, 
+    "Temperature (°C)", criticalColor);
+  
+  drawLineChart(x + 30, y + 220, 400, 120, airQualityHistory, 
+    "Air Quality Index", warningColor);
+}
+
+void drawLineChart(float x, float y, float w, float h, 
+                   ArrayList<Float> data, String label, color lineColor) {
+  fill(245);
+  noStroke();
+  rect(x, y, w, h, 5);
+  
+  fill(primaryDark);
+  textSize(12);
+  text(label, x + 5, y + 15);
+  
+  if (data.size() < 2) return;
+  
+  float minVal = Float.MAX_VALUE;
+  float maxVal = Float.MIN_VALUE;
+  for (Float val : data) {
+    minVal = min(minVal, val);
+    maxVal = max(maxVal, val);
+  }
+  
+  if (maxVal - minVal < 0.1) {
+    maxVal = minVal + 10;
+  }
+  
+  stroke(lineColor);
+  strokeWeight(2);
+  noFill();
+  beginShape();
+  for (int i = 0; i < data.size(); i++) {
+    float px = map(i, 0, data.size() - 1, x + 10, x + w - 10);
+    float py = map(data.get(i), minVal, maxVal, y + h - 10, y + 25);
+    vertex(px, py);
+  }
+  endShape();
+  
+  fill(lineColor);
+  noStroke();
+  float lastX = map(data.size() - 1, 0, data.size() - 1, x + 10, x + w - 10);
+  float lastY = map(data.get(data.size() - 1), minVal, maxVal, y + h - 10, y + 25);
+  ellipse(lastX, lastY, 8, 8);
+  
+  fill(255);
+  rect(lastX + 10, lastY - 12, 60, 20, 3);
+  fill(primaryDark);
+  textAlign(LEFT);
+  textSize(11);
+  text(nf(data.get(data.size() - 1), 0, 1), lastX + 15, lastY);
+}
+
+void drawPriorityActions(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 360, 660, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  text("🎯 Priority Actions", x + 20, y + 30);
+  
+  textFont(bodyFont);
+  textSize(12);
+  fill(100);
+  text("Click to view impact analysis →", x + 20, y + 50);
+  
+  float cardY = y + 80;
+  for (int i = 0; i < min(5, solutions.size()); i++) {
+    drawActionCard(x + 20, cardY, 320, i);
+    cardY += 115;
+  }
+}
+
+void drawActionCard(float x, float y, float w, int index) {
+  Solution s = solutions.get(index);
+  
+  if (selectedSolution == index) {
+    fill(accentBlue, 30);
+    stroke(accentBlue);
+    strokeWeight(2);
+  } else {
+    fill(250);
+    stroke(220);
+    strokeWeight(1);
+  }
+  rect(x, y, w, 100, 8);
+  
+  fill(s.impact > 8 ? criticalColor : s.impact > 6 ? warningColor : goodColor);
+  noStroke();
+  rect(x, y, 50, 100, 8, 0, 0, 8);
+  fill(255);
+  textAlign(CENTER);
+  textFont(titleFont);
+  textSize(24);
+  text(str(index + 1), x + 25, y + 55);
+  
+  fill(primaryDark);
+  textAlign(LEFT);
+  textFont(bodyFont);
+  textSize(14);
+  text(s.name, x + 65, y + 25);
+  
+  textSize(11);
+  fill(100);
+  String shortDesc = s.description;
+  if (shortDesc.length() > 60) shortDesc = shortDesc.substring(0, 57) + "...";
+  text(shortDesc, x + 65, y + 45);
+  
+  float metricsY = y + 75;
+  drawMiniMetric(x + 65, metricsY, "Impact", s.impact, 10, s.impactColor);
+  drawMiniMetric(x + 155, metricsY, "Feasible", s.feasibility, 10, goodColor);
+  drawMiniMetric(x + 245, metricsY, "Cost", 10 - s.cost, 10, accentBlue);
+  
+  if (mouseX > x && mouseX < x + w && mouseY > y && mouseY < y + 100) {
+    fill(accentBlue, 20);
+    noStroke();
+    rect(x, y, w, 100, 8);
+  }
+  
+  textAlign(LEFT);
+}
+
+void drawMiniMetric(float x, float y, String label, float value, float max, color c) {
+  textSize(9);
+  fill(100);
+  text(label, x, y);
+  
+  fill(230);
+  noStroke();
+  rect(x, y + 3, 50, 6, 3);
+  
+  fill(c);
+  rect(x, y + 3, 50 * (value / max), 6, 3);
+}
+
+void drawEarthObservationPanel(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 460, 270, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  text("🛰️ NASA Earth Observations", x + 20, y + 30);
+  
+  textFont(bodyFont);
+  textSize(13);
+  fill(primaryDark);
+  
+  text("Land Surface Temp (MODIS):", x + 20, y + 60);
+  fill(100);
+  text("Urban heat island: +6.8°C above rural areas", x + 20, y + 78);
+  
+  fill(primaryDark);
+  text("Vegetation Index (NDVI):", x + 20, y + 105);
+  fill(100);
+  text("Coverage: 8.7% (Target: 20% for oasis sustainability)", x + 20, y + 123);
+  
+  fill(primaryDark);
+  text("Aerosol Optical Depth:", x + 20, y + 150);
+  fill(100);
+  text("PM2.5: Very High (dust storms + industrial)", x + 20, y + 168);
+  
+  fill(primaryDark);
+  text("Soil Moisture (SMAP):", x + 20, y + 195);
+  fill(100);
+  text("Moderate - palm groves well maintained", x + 20, y + 213);
+  
+  fill(warningColor, 30);
+  noStroke();
+  rect(x + 20, y + 230, 420, 25, 5);
+  fill(warningColor);
+  textSize(12);
+  textFont(titleFont);
+  text("⚠️ Extreme Heat Alert: Protect oasis ecosystems", x + 30, y + 248);
+}
+
+void drawScenarioPlanning() {
+  fill(primaryDark);
+  textFont(titleFont);
+  textSize(22);
+  textAlign(CENTER);
+  text("Scenario Planning & Prediction Models", width/2, 180);
+  
+  textFont(bodyFont);
+  textSize(14);
+  fill(100);
+  text("Simulate urban interventions over 5-10 years", width/2, 210);
+  
+  drawScenarioOption(100, 250, "Baseline", "No intervention - current trajectory", 0);
+  drawScenarioOption(100, 370, "Moderate", "Top 3 solutions + 8% green coverage", 1);
+  drawScenarioOption(100, 490, "Aggressive", "Full intervention + 18% green coverage", 2);
+  
+  drawScenarioImpact(750, 250);
+  
+  textAlign(LEFT);
+}
+
+void drawScenarioOption(float x, float y, String title, String desc, int scenario) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 600, 90, 8);
+  
+  fill(250);
+  stroke(primaryDark);
+  strokeWeight(2);
+  ellipse(x + 30, y + 45, 25, 25);
+  
+  if (scenario == selectedScenario) {
+    fill(accentBlue);
+    noStroke();
+    ellipse(x + 30, y + 45, 15, 15);
+  }
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  textSize(16);
+  textAlign(LEFT);
+  text(title, x + 60, y + 35);
+  
+  textFont(bodyFont);
+  textSize(13);
+  fill(100);
+  textAlign(LEFT);
+  text(desc, x + 60, y + 55);
+  
+  if (mouseX > x && mouseX < x + 600 && mouseY > y && mouseY < y + 90) {
+    fill(accentBlue, 20);
+    noStroke();
+    rect(x, y, 600, 90, 8);
+  }
+}
+
+void drawScenarioImpact(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 550, 480, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  textAlign(LEFT);
+  text("Predicted Outcomes (10-Year)", x + 20, y + 35);
+  
+  String[] metrics = {
+    "Temperature Reduction",
+    "Air Quality Improve",
+    "Green Space Increase",
+    "Energy Savings",
+    "Health Benefits",
+    "Carbon Sequestration"
+  };
+  
+  float[] baseline = {0, 0, 0, 0, 0, 0};
+  float[] moderate = {18, 28, 35, 22, 38, 45};
+  float[] aggressive = {38, 58, 88, 48, 75, 85};
+  
+  float barY = y + 70;
+  for (int i = 0; i < metrics.length; i++) {
+    drawComparisonBar(x + 20, barY, 510, metrics[i], 
+      baseline[i], moderate[i], aggressive[i]);
+    barY += 65;
+  }
+}
+
+void drawComparisonBar(float x, float y, float w, String label, 
+                       float base, float mod, float agg) {
+  textSize(13);
+  fill(primaryDark);
+  textAlign(LEFT);
+  text(label, x, y + 5);
+  
+  float barY = y + 15;
+  float barH = 15;
+  
+  fill(230);
+  noStroke();
+  rect(x, barY, w, barH, 3);
+  
+  fill(goodColor, 150);
+  rect(x, barY, w * (mod / 100.0), barH, 3);
+  
+  fill(excellentColor);
+  rect(x, barY, w * (agg / 100.0), barH, 3);
+  
+  textSize(11);
+  fill(255);
+  textAlign(LEFT);
+  if (mod > 10) text(nf(mod, 0, 0) + "%", x + w * (mod / 100.0) - 30, barY + 11);
+  if (agg > 10) text(nf(agg, 0, 0) + "%", x + w * (agg / 100.0) - 30, barY + 11);
+}
+
+void drawImpactAnalysis() {
+  if (selectedSolution < 0 || selectedSolution >= solutions.size()) {
+    fill(primaryDark);
+    textAlign(CENTER);
+    textFont(titleFont);
+    textSize(18);
+    text("← Select a solution from Overview tab", width/2, height/2);
+    textAlign(LEFT);
+    return;
+  }
+  
+  Solution s = solutions.get(selectedSolution);
+  
+  fill(255);
+  stroke(200);
+  rect(50, 170, width - 100, 100, 8);
+  
+  fill(s.impactColor);
+  noStroke();
+  ellipse(100, 220, 60, 60);
+  fill(255);
+  textAlign(CENTER);
+  textFont(titleFont);
+  textSize(20);
+  text(str(selectedSolution + 1), 100, 230);
+  
+  fill(primaryDark);
+  textAlign(LEFT);
+  textSize(24);
+  text(s.name, 150, 205);
+  
+  textFont(bodyFont);
+  textSize(14);
+  fill(100);
+  text(s.description, 150, 230);
+  text("Timeline: " + s.timeline + " | Est. cost: $" + nf(s.cost * 100, 0, 0) + "k", 150, 250);
+  
+  drawDetailedMetrics(50, 300);
+  
+  textAlign(LEFT);
+}
+
+void drawDetailedMetrics(float x, float y) {
+  Solution s = solutions.get(selectedSolution);
+  
+  fill(255);
+  stroke(200);
+  rect(x, y, 650, 480, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  text("📊 Quantified Benefits", x + 20, y + 35);
+  
+  textFont(bodyFont);
+  float benefitY = y + 70;
+  drawBenefitRow(x + 20, benefitY, "Temp Reduction", s.tempReduction + "°C", s.impactColor);
+  drawBenefitRow(x + 20, benefitY + 60, "Air Quality", nf(s.airImprovement, 0, 0) + "%", goodColor);
+  drawBenefitRow(x + 20, benefitY + 120, "Carbon Capture", nf(s.carbonCapture, 0, 0) + " tons/yr", excellentColor);
+  drawBenefitRow(x + 20, benefitY + 180, "Energy Savings", "$" + nf(s.energySavings, 0, 0) + "k/yr", accentBlue);
+  drawBenefitRow(x + 20, benefitY + 240, "Biodiversity", "+" + nf(s.biodiversity, 0, 0) + " species", color(46, 204, 113));
+  drawBenefitRow(x + 20, benefitY + 300, "Wellbeing", nf(s.wellbeing, 0, 0) + "% improve", color(155, 89, 182));
+  
+  fill(255);
+  stroke(200);
+  rect(x + 680, y, 620, 480, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  text("🗓️ Implementation Roadmap", x + 700, y + 35);
+  
+  drawRoadmap(x + 700, y + 70);
+}
+
+void drawBenefitRow(float x, float y, String label, String value, color c) {
+  fill(primaryDark);
+  textSize(14);
+  textAlign(LEFT);
+  text(label, x, y);
+  
+  fill(c);
+  textFont(titleFont);
+  textSize(22);
+  textAlign(RIGHT);
+  text(value, x + 590, y + 5);
+  textAlign(LEFT);
+  textFont(bodyFont);
+  
+  fill(240);
+  noStroke();
+  rect(x, y + 15, 590, 8, 4);
+  fill(c);
+  rect(x, y + 15, random(400, 580), 8, 4);
+}
+
+void drawRoadmap(float x, float y) {
+  String[] phases = {"Planning", "Community Input", "Construction", "Monitoring"};
+  
+  float phaseY = y;
+  for (int i = 0; i < phases.length; i++) {
+    fill(240);
+    noStroke();
+    rect(x, phaseY, 570, 80, 8);
+    
+    fill(accentBlue);
+    rect(x, phaseY, 60, 80, 8, 0, 0, 8);
+    fill(255);
+    textAlign(CENTER);
+    textSize(11);
+    text("Phase\n" + (i + 1), x + 30, phaseY + 33);
+    
+    fill(primaryDark);
+    textAlign(LEFT);
+    textFont(titleFont);
+    textSize(15);
+    text(phases[i], x + 80, phaseY + 30);
+    
+    textFont(bodyFont);
+    textSize(12);
+    fill(100);
+    String detail = i == 0 ? "Assessment, permits, design" :
+                    i == 1 ? "Public consultation, feedback" :
+                    i == 2 ? "Phased implementation" :
+                    "Performance tracking";
+    text(detail, x + 80, phaseY + 50);
+    
+    phaseY += 95;
+  }
+  textAlign(LEFT);
+}
+
+void drawCitizenInput() {
+  fill(primaryDark);
+  textFont(titleFont);
+  textSize(22);
+  textAlign(CENTER);
+  text("Community Observations & Engagement", width/2, 180);
+  
+  textFont(bodyFont);
+  textSize(14);
+  fill(100);
+  text("Local knowledge enhances data-driven decisions", width/2, 210);
+  
+  drawObservationForm(100, 250);
+  drawObservationFeed(750, 250);
+  
+  textAlign(LEFT);
+}
+
+void drawObservationForm(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 600, 520, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  textAlign(LEFT);
+  text("📝 Submit Local Observation", x + 20, y + 35);
+  
+  textFont(bodyFont);
+  textSize(13);
+  fill(100);
+  textAlign(LEFT);
+  text("Help improve urban planning with your insights", x + 20, y + 55);
+  
+  float formY = y + 90;
+  fill(250);
+  stroke(200);
+  rect(x + 20, formY, 560, 40, 5);
+  fill(150);
+  textSize(12);
+  textAlign(LEFT);
+  text("Location (neighborhood or coordinates)", x + 30, formY + 25);
+  
+  fill(250);
+  stroke(200);
+  rect(x + 20, formY + 60, 560, 100, 5);
+  fill(150);
+  textAlign(LEFT);
+  text("Describe observation (heat, air, noise...)", x + 30, formY + 85);
+  
+  String[] categories = {"🌡️ Heat", "🌫️ Air", "🌳 Green", "🔊 Noise", "💧 Water"};
+  float btnX = x + 20;
+  for (int i = 0; i < categories.length; i++) {
+    fill(230);
+    stroke(200);
+    rect(btnX, formY + 180, 105, 35, 5);
+    fill(primaryDark);
+    textAlign(CENTER);
+    text(categories[i], btnX + 52, formY + 203);
+    btnX += 112;
+  }
+  textAlign(LEFT);
+  
+  fill(accentBlue);
+  noStroke();
+  rect(x + 20, formY + 240, 560, 45, 8);
+  fill(255);
+  textAlign(CENTER);
+  textFont(titleFont);
+  textSize(16);
+  text("📤 Submit Observation", x + 300, formY + 268);
+  textAlign(LEFT);
+  
+  fill(primaryDark);
+  textFont(bodyFont);
+  textSize(12);
+  textAlign(LEFT);
+  text("💡 Tip: Observations validated with sensor data", x + 20, formY + 310);
+  
+  fill(goodColor, 30);
+  noStroke();
+  rect(x + 20, formY + 340, 560, 60, 8);
+  fill(primaryDark);
+  textFont(titleFont);
+  textSize(15);
+  textAlign(LEFT);
+  text("📊 Community Impact", x + 35, formY + 368);
+  textFont(bodyFont);
+  textSize(13);
+  fill(100);
+  textAlign(LEFT);
+  text("Total: " + citizenObservations.size() + " | Contributors: 1,247 | Accuracy: 94%", 
+       x + 35, formY + 388);
+}
+
+void drawObservationFeed(float x, float y) {
+  fill(255);
+  stroke(200);
+  rect(x, y, 550, 520, 8);
+  
+  fill(primaryDark);
+  noStroke();
+  textFont(titleFont);
+  textAlign(LEFT);
+  text("📢 Recent Community Reports", x + 20, y + 35);
+  
+  textFont(bodyFont);
+  textSize(12);
+  fill(100);
+  textAlign(LEFT);
+  text("Verified observations from residents", x + 20, y + 55);
+  
+  float obsY = y + 85;
+  for (int i = 0; i < min(7, citizenObservations.size()); i++) {
+    Observation obs = citizenObservations.get(i);
+    drawObservationCard(x + 20, obsY, 510, obs);
+    obsY += 65;
+  }
+}
+
+void drawObservationCard(float x, float y, float w, Observation obs) {
+  fill(245);
+  noStroke();
+  rect(x, y, w, 55, 5);
+  
+  fill(obs.verified ? goodColor : warningColor);
+  ellipse(x + 25, y + 27, 35, 35);
+  fill(255);
+  textAlign(CENTER);
+  textSize(16);
+  text(obs.icon, x + 25, y + 33);
+  
+  fill(primaryDark);
+  textAlign(LEFT);
+  textFont(titleFont);
+  textSize(13);
+  text(obs.location, x + 50, y + 20);
+  
+  textFont(bodyFont);
+  textSize(11);
+  fill(100);
+  textAlign(LEFT);
+  String desc = obs.description;
+  if (desc.length() > 80) desc = desc.substring(0, 77) + "...";
+  text(desc, x + 50, y + 38);
+  
+  if (obs.verified) {
+    fill(goodColor);
+    noStroke();
+    rect(x + w - 80, y + 10, 70, 18, 9);
+    fill(255);
+    textSize(10);
+    textAlign(CENTER);
+    text("✓ Verified", x + w - 45, y + 22);
+  }
+  
+  textAlign(LEFT);
+}
+
+void drawAlertBanner() {
+  if (currentData.temperature > 35 || currentData.airQuality > 400) {
+    fill(criticalColor);
+    noStroke();
+    rect(0, height - 50, width, 50);
+    
+    fill(255);
+    textAlign(CENTER);
+    textFont(titleFont);
+    textSize(16);
+    String alert = "⚠️ CRITICAL: ";
+    if (currentData.temperature > 35) alert += "Extreme heat advisory. ";
+    if (currentData.airQuality > 400) alert += "Hazardous air quality.";
+    text(alert, width/2, height - 23);
+    textAlign(LEFT);
+  }
+}
+
+// === INTERACTION HANDLERS ===
+void mousePressed() {
+  float tabWidth = width / 4.0;
+  if (mouseY > 90 && mouseY < 140) {
+    for (int i = 0; i < 4; i++) {
+      if (mouseX > i * tabWidth && mouseX < (i+1) * tabWidth) {
+        currentView = i;
+        return;
+      }
+    }
+  }
+  
+  if (currentView == 0) {
+    float cardY = 240;
+    for (int i = 0; i < min(5, solutions.size()); i++) {
+      if (mouseX > 1030 && mouseX < 1350 && 
+          mouseY > cardY && mouseY < cardY + 100) {
+        selectedSolution = i;
+        currentView = 2;
+        return;
+      }
+      cardY += 115;
+    }
+  }
+  
+  if (currentView == 1) {
+    for (int i = 0; i < 3; i++) {
+      float y = 250 + i * 120;
+      if (mouseX > 100 && mouseX < 700 && mouseY > y && mouseY < y + 90) {
+        selectedScenario = i;
+        return;
+      }
+    }
+  }
+}
+
+void keyPressed() {
+  if (key == 't' || key == 'T') {
+    showEarthData = !showEarthData;
+  }
+  if (key == 'r' || key == 'R') {
+    generateSolutions();
+    detectHotSpots();
+  }
+  if (key >= '1' && key <= '4') {
+    currentView = key - '1';
+  }
+}
+
+// === AI SOLUTION GENERATION ===
+void generateSolutions() {
+  solutions.clear();
+  
+  if (currentData.temperature > 35) {
+    solutions.add(new Solution(
+      "🌳 Oasis Corridor Expansion",
+      "Extend palm grove corridors with 30,000 date palms for natural cooling",
+      9.5, 9, color(27, 94, 32), 4.2, 48, 920, 380, 25, 72, "24 months"
+    ));
+    
+    solutions.add(new Solution(
+      "🏢 Traditional Mashrabiya Cooling",
+      "Install traditional wooden screens on buildings for shade + ventilation",
+      8.8, 8, color(76, 175, 80), 3.8, 35, 680, 290, 12, 65, "18 months"
+    ));
+    
+    solutions.add(new Solution(
+      "💦 Aflaj System Restoration",
+      "Restore ancient irrigation channels for evaporative cooling",
+      8.2, 7, color(33, 150, 243), 2.8, 28, 450, 520, 18, 58, "30 months"
+    ));
+  }
+  
+  if (currentData.airQuality > 400) {
+    solutions.add(new Solution(
+      "🚲 Green Mobility Network",
+      "Create 50km bicycle lanes + electric shuttle system",
+      9.3, 7, color(27, 94, 32), 3.5, 55, 1200, 220, 15, 75, "28 months"
+    ));
+    
+    solutions.add(new Solution(
+      "🌿 Palm Grove Air Purification",
+      "Strategic palm planting along King Abdullah Road for dust reduction",
+      8.4, 9, color(129, 199, 132), 2.5, 42, 580, 480, 30, 68, "20 months"
+    ));
+  }
+  
+  if (currentData.greenCoverage < 12) {
+    solutions.add(new Solution(
+      "🏞️ Al-Qarah Mountain Parks",
+      "Develop 5 mountain parks with native vegetation",
+      9.1, 8, color(56, 142, 60), 3.2, 38, 750, 580, 35, 80, "36 months"
+    ));
+    
+    solutions.add(new Solution(
+      "🌱 Al-Hofuf Green Belt",
+      "Create circular green belt around old city center",
+      8.7, 9, color(102, 187, 106), 2.8, 32, 420, 450, 28, 70, "26 months"
+    ));
+  }
+  
+  if (map(currentData.soilMoisture, 0, 1023, 0, 100) < 40) {
+    solutions.add(new Solution(
+      "💧 Smart Aflaj Modernization",
+      "IoT sensors + automated gates for traditional irrigation",
+      8.6, 8, color(3, 169, 244), 2.6, 25, 380, 350, 12, 65, "22 months"
+    ));
+    
+    solutions.add(new Solution(
+      "🌊 Al-Asfar Lake Protection",
+      "Watershed management for the yellow lake ecosystem",
+      7.9, 7, color(41, 182, 246), 3.0, 22, 280, 420, 20, 60, "32 months"
+    ));
+  }
+  
+  if (currentData.noiseLevel > 500) {
+    solutions.add(new Solution(
+      "🎵 Al-Mubarraz Acoustic Gardens",
+      "Palm grove sound barriers along Prince Nayef Road",
+      7.2, 8, color(121, 85, 72), 1.8, 18, 220, 190, 15, 52, "14 months"
+    ));
+  }
+  
+  solutions.add(new Solution(
+    "🔄 Permeable Desert Pavements",
+    "Replace asphalt with cooling permeable materials in Al-Omran",
+    8.1, 8, color(158, 158, 158), 2.9, 30, 520, 580, 10, 66, "25 months"
+  ));
+  
+  solutions.add(new Solution(
+    "☀️ Solar Canopy Markets",
+    "Install solar shades in traditional souq areas",
+    8.9, 9, color(255, 193, 7), 3.6, 35, 850, 320, 12, 74, "20 months"
+  ));
+  
+  solutions.sort((a, b) -> Float.compare(
+    (b.impact * 0.7 + b.feasibility * 0.3), 
+    (a.impact * 0.7 + a.feasibility * 0.3)
+  ));
+}
+
+// === HOTSPOT DETECTION ===
+void detectHotSpots() {
+  hotSpots.clear();
+  
+  for (int i = 0; i < 55; i++) {
+    String type = "";
+    float severity = random(0.2, 1.0);
+    
+    if (i % 11 < 3 && i / 11 < 2) {
+      type = "Heat Island";
+      severity = random(0.7, 0.95);
+    } else if (i % 11 > 8) {
+      type = "Air Pollution";
+      severity = random(0.6, 0.85);
+    } else if (i / 11 > 3 && i % 11 > 5) {
+      type = "Low Greenery";
+      severity = random(0.3, 0.6);
+    } else {
+      type = random(1) > 0.5 ? "Heat Stress" : "Noise";
+      severity = random(0.4, 0.75);
+    }
+    
+    hotSpots.add(new HotSpot(type, severity));
+  }
+}
+
+void simulateCitizenObservations() {
+  citizenObservations.clear();
+  
+  citizenObservations.add(new Observation(
+    "🌡️", "Al-Hofuf City Center", 
+    "Extreme heat in concrete areas - needs palm shade urgently", 
+    true
+  ));
+  
+  citizenObservations.add(new Observation(
+    "🌫️", "King Abdullah Road", 
+    "Dust storms and vehicle emissions affecting air quality", 
+    true
+  ));
+  
+  citizenObservations.add(new Observation(
+    "🌳", "Al-Qarah Mountain", 
+    "Mountain parks provide natural cooling - expand more!", 
+    true
+  ));
+  
+  citizenObservations.add(new Observation(
+    "💧", "Traditional Aflaj", 
+    "Ancient irrigation system works perfectly - preserve it", 
+    true
+  ));
+  
+  citizenObservations.add(new Observation(
+    "🔊", "Prince Nayef Road", 
+    "Traffic noise disturbing residential areas", 
+    false
+  ));
+  
+  citizenObservations.add(new Observation(
+    "🌡️", "Al-Omran District", 
+    "Traditional buildings stay cooler than modern ones", 
+    true
+  ));
+  
+  citizenObservations.add(new Observation(
+    "🌫️", "Industrial Zone", 
+    "Factory emissions mixed with desert dust - air filters needed", 
+    true
+  ));
+  
+  citizenObservations.add(new Observation(
+    "🌳", "Palm Groves", 
+    "Date palms naturally cool the area - plant more corridors", 
+    true
+  ));
+}
+
+// === DATA HANDLING ===
+void serialEvent(Serial p) {
+  try {
+    String data = p.readStringUntil('\n');
+    if (data != null) {
+      data = trim(data);
+      if (data.startsWith("URBAN_DATA:")) {
+        String[] values = split(data.substring(11), ',');
+        if (values.length >= 7) {
+          currentData.temperature = float(values[0]);
+          currentData.humidity = float(values[1]);
+          currentData.airQuality = int(values[2]);
+          currentData.soilMoisture = int(values[3]);
+          currentData.lightLevel = int(values[4]);
+          currentData.noiseLevel = int(values[5]);
+          currentData.uvIndex = int(values[6]);
+          
+          tempHistory.add(currentData.temperature);
+          airQualityHistory.add(float(currentData.airQuality));
+          if (tempHistory.size() > maxHistoryPoints) {
+            tempHistory.remove(0);
+            airQualityHistory.remove(0);
+          }
+          
+          generateSolutions();
+          detectHotSpots();
+        }
+      } else if (data.startsWith("CITIZEN_OBS:")) {
+        String[] parts = split(data.substring(12), '|');
+        if (parts.length >= 3) {
+          citizenObservations.add(0, new Observation(
+            parts[0], parts[1], parts[2], false
+          ));
+          if (citizenObservations.size() > 20) {
+            citizenObservations.remove(citizenObservations.size() - 1);
+          }
+        }
+      }
+    }
+  } catch (Exception e) {
+    println("Error processing serial data: " + e);
+  }
+}
+
+// === UTILITY FUNCTIONS ===
+int calculateHeatScore() {
+  return int(constrain(10 - (currentData.temperature - 20) / 3, 0, 10));
+}
+
+int calculateAirScore() {
+  if (currentData.airQuality > 600) return 1;
+  if (currentData.airQuality > 500) return 3;
+  if (currentData.airQuality > 400) return 5;
+  if (currentData.airQuality > 300) return 7;
+  if (currentData.airQuality > 200) return 8;
+  return 10;
+}
+
+int calculateGreenScore() {
+  int moisture = int(map(currentData.soilMoisture, 0, 1023, 0, 100));
+  return int(constrain(moisture / 10, 0, 10));
+}
+
+// === DATA CLASSES ===
+class UrbanData {
+  float temperature, humidity, greenCoverage;
+  int airQuality, soilMoisture, lightLevel, noiseLevel, uvIndex, population;
+  String location;
+}
+
+class Solution {
+  String name, description, timeline;
+  float impact, feasibility, cost;
+  float tempReduction, airImprovement, carbonCapture;
+  float energySavings, biodiversity, wellbeing;
+  color impactColor;
+  
+  Solution(String n, String d, float i, float f, color c,
+           float temp, float air, float carbon, float energy,
+           float bio, float well, String time) {
+    name = n;
+    description = d;
+    impact = i;
+    feasibility = f;
+    impactColor = c;
+    cost = random(3, 9);
+    tempReduction = temp;
+    airImprovement = air;
+    carbonCapture = carbon;
+    energySavings = energy;
+    biodiversity = bio;
+    wellbeing = well;
+    timeline = time;
+  }
+}
+
+class HotSpot {
+  String type;
+  float severity;
+  
+  HotSpot(String t, float s) {
+    type = t;
+    severity = s;
+  }
+}
+
+class Observation {
+  String icon, location, description;
+  boolean verified;
+  
+  Observation(String i, String loc, String desc, boolean v) {
+    icon = i;
+    location = loc;
+    description = desc;
+    verified = v;
+  }
+}
